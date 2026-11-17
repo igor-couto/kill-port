@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.74"
 description = "Free a TCP port by terminating the processes listening on it"
+license = "MIT"
 readme = "README.md"
 
 [dependencies]

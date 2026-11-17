@@ -115,3 +115,9 @@ checks on Ubuntu and Windows.
 ### Author
 
 * **Igor Couto** - [igor.fcouto@gmail.com](mailto:igor.fcouto@gmail.com)
+
+## License
+
+Released under the [MIT License](LICENSE). You are free to use, modify, and
+redistribute this software, including commercially, provided the copyright
+notice and license text are retained.
