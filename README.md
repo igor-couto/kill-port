@@ -65,6 +65,57 @@ Dry run: no processes were terminated.
 
 ## Install
 
+### Prebuilt binaries
+
+[Releases](https://github.com/igor-couto/kill-port/releases) ship ready-to-run
+builds, so a Rust toolchain is not required:
+
+| Platform | File |
+| --- | --- |
+| Linux x86_64 | `killport-<version>-linux-x86_64.tar.gz` |
+| Linux aarch64 | `killport-<version>-linux-aarch64.tar.gz` |
+| Linux armv7 | `killport-<version>-linux-armv7.tar.gz` |
+| Linux riscv64 | `killport-<version>-linux-riscv64.tar.gz` |
+| Windows x86_64 | `killport-<version>-windows-x86_64.zip` |
+| Windows aarch64 | `killport-<version>-windows-aarch64.zip` |
+
+On Linux, extract the archive and install the binary:
+
+```console
+$ tar -xzf killport-0.1.0-linux-x86_64.tar.gz
+$ sudo install -m 0755 killport /usr/local/bin/killport
+```
+
+On Windows, extract the ZIP and copy `killport.exe` to a directory on your
+`PATH`.
+
+### RPM packages
+
+Releases also include RPM packages for x86_64, aarch64, and riscv64:
+
+```console
+$ sudo rpm -U killport-0.1.0-1.x86_64.rpm
+```
+
+### Debian and Ubuntu packages
+
+Releases also include `.deb` packages for amd64, arm64, and riscv64:
+
+```console
+$ sudo apt install ./killport_0.1.0-1_amd64.deb
+```
+
+### Verifying a download
+
+When release signing is configured, every asset has a detached ASCII-armored
+signature:
+
+```console
+$ gpg --verify killport-0.1.0-linux-x86_64.tar.gz.asc killport-0.1.0-linux-x86_64.tar.gz
+```
+
+### Build from source
+
 From this directory:
 
 ```console

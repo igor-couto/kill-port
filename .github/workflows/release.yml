@@ -1,0 +1,187 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x86_64
+            cross: false
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            platform: linux-aarch64
+            cross: true
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            platform: linux-armv7
+            cross: true
+          - os: ubuntu-latest
+            target: riscv64gc-unknown-linux-gnu
+            platform: linux-riscv64
+            cross: true
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows-x86_64
+            cross: false
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            platform: windows-aarch64
+            cross: false
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check tag matches the crate version
+        shell: bash
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match Cargo.toml version ${version}"
+            exit 1
+          fi
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Build with cross
+        if: matrix.cross
+        run: cross build --release --locked --target ${{ matrix.target }}
+
+      - name: Build
+        if: ${{ !matrix.cross }}
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          name="killport-${version}-${{ matrix.platform }}"
+          mkdir -p dist staging
+          cp "target/${{ matrix.target }}/release/killport" staging/
+          cp LICENSE staging/
+          tar -czf "dist/${name}.tar.gz" -C staging killport LICENSE
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          $name = "killport-$version-${{ matrix.platform }}"
+          New-Item -ItemType Directory -Force dist, staging | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/killport.exe" staging
+          Copy-Item LICENSE staging
+          Compress-Archive -Path staging/* -DestinationPath "dist/$name.zip"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Build RPM and DEB packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+
+          for arch in x86_64 aarch64 riscv64; do
+            rm -rf "pkg-${arch}"
+            mkdir -p "pkg-${arch}"
+            tar -xzf "dist/killport-${version}-linux-${arch}.tar.gz" \
+              -C "pkg-${arch}" killport
+
+            sed -e "s|__VERSION__|${version}|g" \
+                -e "s|__ARCH__|${arch}|g" \
+                -e "s|__BINARY__|/work/pkg-${arch}/killport|g" \
+                .github/nfpm.yaml > "nfpm-${arch}.yaml"
+
+            for packager in rpm deb; do
+              # nfpm maps the same architecture name for both formats
+              # (x86_64 becomes amd64 in the .deb file name).
+              # The image publishes no moving v2 tag, so pin a release.
+              docker run --rm \
+                -v "${PWD}:/work" \
+                -w /work \
+                ghcr.io/goreleaser/nfpm:v2.49.0 \
+                package -f "/work/nfpm-${arch}.yaml" -p "$packager" -t /work/dist
+            done
+          done
+
+      - name: Import signing key
+        if: env.GPG_PRIVATE_KEY != ''
+        run: |
+          # Keys exported from Windows often carry CRLF line endings, which the
+          # armor parser rejects; strip them before importing.
+          printf '%s\n' "$GPG_PRIVATE_KEY" | tr -d '\r' | gpg --batch --import
+
+      - name: Sign artifacts
+        if: env.GPG_PRIVATE_KEY != ''
+        run: |
+          set -euo pipefail
+          for file in dist/*.tar.gz dist/*.zip dist/*.rpm dist/*.deb; do
+            gpg --batch --yes --armor --detach-sign \
+              --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" "$file"
+          done
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          gh release upload "$GITHUB_REF_NAME" dist/* --clobber

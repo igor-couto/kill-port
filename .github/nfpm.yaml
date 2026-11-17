@@ -1,0 +1,28 @@
+# Template used by .github/workflows/release.yml. Substituted with sed:
+#   __VERSION__  crate version, without the leading "v" (for example 0.1.0)
+#   __ARCH__     RPM architecture (x86_64 or aarch64)
+#   __BINARY__   container path to the binary being packaged
+name: killport
+arch: __ARCH__
+platform: linux
+version: __VERSION__
+release: "1"
+section: utils
+priority: optional
+maintainer: Igor Couto <igor.fcouto@gmail.com>
+vendor: Igor Couto
+homepage: https://github.com/igor-couto/kill-port
+license: MIT
+description: |
+  Free a TCP port by terminating the processes listening on it.
+  killport finds every process that owns a listening TCP socket on the given
+  port, stops it, and waits for the port to be released.
+contents:
+  - src: __BINARY__
+    dst: /usr/bin/killport
+    file_info:
+      mode: 0755
+  - src: /work/LICENSE
+    dst: /usr/share/licenses/killport/LICENSE
+    file_info:
+      mode: 0644
