@@ -1,5 +1,7 @@
 # killport
 
+[![CI](https://github.com/igor-couto/kill-port/actions/workflows/ci.yml/badge.svg)](https://github.com/igor-couto/kill-port/actions/workflows/ci.yml)
+
 A small command-line tool that frees a TCP port by finding and terminating the
 processes listening on it. It runs on Linux and Windows and has no runtime
 dependencies or third-party Rust crates.
@@ -109,3 +111,7 @@ The integration test spawns a helper process that owns a real TCP listener,
 then runs the CLI against it. The test suite therefore runs on both supported
 operating systems without any external tools. GitHub Actions runs the same
 checks on Ubuntu and Windows.
+
+### Author
+
+* **Igor Couto** - [igor.fcouto@gmail.com](mailto:igor.fcouto@gmail.com)
